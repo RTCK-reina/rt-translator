@@ -137,7 +137,7 @@ class VadSegmenter:
                 self._triggered = True
                 self._speech_start = max(0, w_start - self._pad_samples())
                 self._last_speech_end = w_end
-                self._seg_windows = list(self._pre) + [win]
+                self._seg_windows = list(self._pre)  # win already appended
                 self._pre.clear()
                 self._silence = 0
             return None

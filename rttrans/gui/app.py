@@ -15,12 +15,10 @@ def run() -> int:
     import os
     from ..config import portable_root
 
-    # portable package: whisper/HF cache shipped inside the exe folder
+    # portable package: keep any HF downloads inside the exe folder too
     pr = portable_root()
     if pr is not None:
-        hf = pr / "hf_cache"
-        if hf.exists():
-            os.environ.setdefault("HF_HOME", str(hf))
+        os.environ.setdefault("HF_HOME", str(pr / "hf_cache"))
 
     app = QApplication(sys.argv)
     app.setApplicationName("RT Translator")

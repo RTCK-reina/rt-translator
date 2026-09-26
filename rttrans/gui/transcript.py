@@ -22,7 +22,9 @@ def lang_color(code: str) -> str:
     c = _LANG_COLORS.get(code)
     if c:
         return c
-    return _FALLBACK[hash(code) % len(_FALLBACK)]
+    # stable pick (python hash() is randomized per process)
+    h = sum(ord(ch) * 31 ** i for i, ch in enumerate(code))
+    return _FALLBACK[h % len(_FALLBACK)]
 
 
 def _pill(text: str, bg: str, fg: str = "#14151b") -> QLabel:
@@ -99,11 +101,14 @@ class TranscriptView(QScrollArea):
         self._anims: list[QPropertyAnimation] = []
 
     def add_segment(self, s: dict) -> None:
+        sb = self.verticalScrollBar()
+        at_bottom = sb.value() >= sb.maximum() - 8
         card = SegmentCard(s)
         self._lay.insertWidget(self._lay.count() - 1, card)
         self._fade_in(card)
         self._trim()
-        self._scroll_bottom()
+        if at_bottom:
+            self._scroll_bottom()
 
     def clear(self) -> None:
         while self._lay.count() > 1:

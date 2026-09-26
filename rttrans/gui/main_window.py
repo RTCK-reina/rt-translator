@@ -35,6 +35,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(self.settings, "設定")
         self.setCentralWidget(tabs)
 
+        self.settings.saved.connect(self.live.refresh_overlay)
         bridge.event.connect(self._dispatch)
 
     def _dispatch(self, kind: str, payload: dict) -> None:

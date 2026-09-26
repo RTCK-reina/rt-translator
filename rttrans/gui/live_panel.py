@@ -277,6 +277,11 @@ class LivePanel(QWidget):
         elif self.overlay is not None:
             self.overlay.hide()
 
+    def refresh_overlay(self) -> None:
+        """Push current overlay settings to a live overlay window."""
+        if self.overlay is not None:
+            self.overlay.update_config(self.cfg.overlay)
+
     def _export_session(self) -> None:
         if not self._session_lines:
             return

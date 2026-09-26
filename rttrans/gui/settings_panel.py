@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox,
                                QFileDialog, QFormLayout, QGroupBox,
                                QHBoxLayout, QLabel, QLineEdit, QMessageBox,
                                QPlainTextEdit, QProgressBar, QPushButton,
                                QScrollArea, QSpinBox, QVBoxLayout, QWidget)
 
+from PySide6.QtCore import Qt, Signal
 from ..config import Config
 from ..pipeline import Pipeline
 from .. import modeldl as dm
@@ -17,6 +17,8 @@ from .recordings_panel import run_bg
 
 
 class SettingsPanel(QWidget):
+    saved = Signal()  # emitted after settings are persisted
+
     def __init__(self, cfg: Config, pipeline: Pipeline):
         super().__init__()
         self.cfg = cfg
@@ -246,6 +248,7 @@ class SettingsPanel(QWidget):
         self.eco_form.apply(c.eco)
         self.power_form.apply(c.power)
         c.save()
+        self.saved.emit()
         self._log("設定を保存しました")
 
 
