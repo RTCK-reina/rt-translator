@@ -230,7 +230,8 @@ class RecordingsPanel(QWidget):
         rec = self._selected()
         if rec is None:
             return
-        model = self.model_combo.currentText()
+        model = self.cfg.resolve_whisper(
+            self.cfg.whisper_model_path or self.model_combo.currentText())
         ct = "float16" if "large" in model or "turbo" in model else "int8"
         self._busy("再文字起こし中…")
 

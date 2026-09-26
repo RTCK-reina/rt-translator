@@ -68,11 +68,14 @@ def run_selftest(out_path: Path | None = None) -> int:
 
         # 7) store
         from .store import Store
-        st = Store(str(app_data_dir() / "selftest_db"))
+        import shutil
+        dbdir = app_data_dir() / "selftest_db"
+        st = Store(str(dbdir))
         rid = st.create_recording("x", "selftest", "dev", "eco")
         st.finish_recording(rid, 0.1)
         st.delete_recording(rid)
         st.close()
+        shutil.rmtree(dbdir, ignore_errors=True)
         log("store ok")
 
     except Exception:

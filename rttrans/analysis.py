@@ -41,44 +41,48 @@ def retranscribe(rec: Recording, cfg: Config, store: Store,
 
     audio = load_audio_16k(rec.path)
     eng = SttEngine(model_name, device="cuda", compute_type=compute_type)
-    eng.load()
+    try:
+        eng.load()
 
-    # 1) VAD the whole file -> speech regions, merged into <=25 s blocks
-    vad = VadSegmenter(threshold=0.5, min_silence_ms=500, pad_ms=150,
-                       min_speech_ms=200, max_speech_s=25.0)
-    regions: list[tuple[int, int]] = []
-    blk = 25 * 16000
-    for i in range(0, len(audio), blk):
-        for seg in vad.feed(audio[i:i + blk]):
-            regions.append((seg.start, seg.end))
-    tail = vad.flush()
-    if tail is not None:
-        regions.append((tail.start, tail.end))
+        # 1) VAD the whole file -> speech regions, merged into <=25 s blocks
+        vad = VadSegmenter(threshold=0.5, min_silence_ms=500, pad_ms=150,
+                           min_speech_ms=200, max_speech_s=25.0)
+        regions: list[tuple[int, int]] = []
+        blk = 25 * 16000
+        for i in range(0, len(audio), blk):
+            for seg in vad.feed(audio[i:i + blk]):
+                regions.append((seg.start, seg.end))
+        tail = vad.flush()
+        if tail is not None:
+            regions.append((tail.start, tail.end))
 
-    # merge adjacent regions into blocks <= 25 s
-    blocks: list[tuple[int, int]] = []
-    for a, b in regions:
-        if blocks and a - blocks[-1][0] <= blk and b - a < 3 * 16000:
-            blocks[-1] = (blocks[-1][0], b)
-        else:
-            blocks.append((a, b))
-    if not blocks:
-        blocks = [(0, len(audio))]
+        # merge adjacent regions into blocks <= 25 s (gap < 3 s)
+        blocks: list[tuple[int, int]] = []
+        for a, b in regions:
+            if (blocks and a - blocks[-1][1] < 3 * 16000
+                    and b - blocks[-1][0] <= blk):
+                blocks[-1] = (blocks[-1][0], b)
+            else:
+                blocks.append((a, b))
+        if not blocks:
+            blocks = [(0, len(audio))]
 
-    # 2) transcribe each block
-    segments: list[dict] = []
-    for bi, (a, b) in enumerate(blocks):
-        chunk = audio[a:b]
-        results = eng.transcribe(chunk, beam_size=5)
-        base = a / 16000.0
-        for r in results:
-            segments.append({
-                "start": base + r.start, "end": base + r.end,
-                "lang": normalize(r.lang), "speaker": "",
-                "text": r.text, "translation": None, "prob": r.avg_logprob,
-            })
-        if progress:
-            progress("文字起こし", (bi + 1) / len(blocks) * 0.9)
+        # 2) transcribe each block
+        segments: list[dict] = []
+        for bi, (a, b) in enumerate(blocks):
+            chunk = audio[a:b]
+            results = eng.transcribe(chunk, beam_size=5)
+            base = a / 16000.0
+            for r in results:
+                segments.append({
+                    "start": base + r.start, "end": base + r.end,
+                    "lang": normalize(r.lang), "speaker": "",
+                    "text": r.text, "translation": None, "prob": r.avg_logprob,
+                })
+            if progress:
+                progress("文字起こし", (bi + 1) / len(blocks) * 0.9)
+    finally:
+        eng.unload()  # free VRAM for the next operation / gaming
 
     if translate_missing and cfg.translation_enabled:
         tr = NllbTranslator(cfg.nllb_dir, "cpu", "int8")

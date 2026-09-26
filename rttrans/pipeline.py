@@ -188,6 +188,10 @@ class Pipeline:
             except queue.Empty:
                 chunk = None
             if chunk is None:
+                if self._cap is not None and self._cap.error is not None:
+                    self._emit("error",
+                               {"text": f"キャプチャ停止: {self._cap.error}"})
+                    break
                 continue
 
             now = time.monotonic()
@@ -197,7 +201,7 @@ class Pipeline:
                 nb = 64
                 n = chunk.size // nb * nb
                 if n >= nb:
-                    amps = np.abs(chunk[:n].reshape(-1, nb)).max(axis=0).tolist()
+                    amps = np.abs(chunk[:n].reshape(nb, -1)).max(axis=1).tolist()
                 else:
                     amps = [float(np.abs(chunk).max()) if chunk.size else 0.0] * nb
                 self._emit("level", {"rms": min(1.0, rms * 4), "wave": amps})
