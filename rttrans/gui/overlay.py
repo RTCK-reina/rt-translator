@@ -8,16 +8,92 @@ from __future__ import annotations
 import ctypes
 from collections import deque
 
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, Qt
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QFrame, QGraphicsDropShadowEffect,
+                               QGraphicsOpacityEffect, QHBoxLayout, QLabel,
+                               QVBoxLayout, QWidget)
 
 from ..config import OverlayConfig
 from ..langs import lang_name
+from . import theme
+from .transcript import lang_color
 
 GWL_EXSTYLE = -20
 WS_EX_LAYERED = 0x00080000
 WS_EX_TRANSPARENT = 0x00000020
+
+
+def _fade_in(w: QWidget, ms: int = 180) -> None:
+    eff = QGraphicsOpacityEffect(w)
+    w.setGraphicsEffect(eff)
+    anim = QPropertyAnimation(eff, b"opacity", w)
+    anim.setDuration(ms)
+    anim.setStartValue(0.0)
+    anim.setEndValue(1.0)
+    anim.setEasingCurve(QEasingCurve.OutCubic)
+    anim.finished.connect(lambda: w.setGraphicsEffect(None))
+    w._fade_anim = anim  # keep alive
+    anim.start()
+
+
+def _pill(text: str, bg: str, fg: str = "#14151b") -> QLabel:
+    lab = QLabel(text)
+    lab.setStyleSheet(
+        f"background: {bg}; color: {fg}; border-radius: 8px;"
+        "padding: 0px 7px; font-size: 11px; font-weight: 700;")
+    lab.setFixedHeight(17)
+    return lab
+
+
+class _Line(QWidget):
+    """One subtitle entry: pill-tagged original + bold translation."""
+
+    def __init__(self, cfg: OverlayConfig, lang: str, speaker: str,
+                 original: str, translation: str | None):
+        super().__init__()
+        self.setAttribute(Qt.WA_StyledBackground, False)
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(1)
+
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(5)
+        h.addWidget(_pill(lang_name(lang), lang_color(lang)))
+        if speaker:
+            h.addWidget(_pill(speaker, "#3a3e52", "#dfe3f0"))
+        self.orig = QLabel(original)
+        self.orig.setObjectName("o")
+        self.orig.setWordWrap(True)
+        h.addWidget(self.orig, 1)
+        v.addWidget(row)
+
+        self.tr: QLabel | None = None
+        if translation:
+            self.tr = QLabel(translation)
+            self.tr.setObjectName("t")
+            self.tr.setWordWrap(True)
+            v.addWidget(self.tr)
+        if not cfg.show_original:
+            row.hide()
+        self._orig_row = row
+        self._style(cfg)
+
+    def _style(self, cfg: OverlayConfig) -> None:
+        fs = cfg.font_size
+        self.orig.setStyleSheet(
+            f"color: #b8bccd; font-size: {max(10, fs - 8)}px;"
+            "background: transparent;")
+        if self.tr is not None:
+            self.tr.setStyleSheet(
+                f"color: #ffffff; font-size: {fs}px; font-weight: 700;"
+                "background: transparent;")
+
+    def apply_cfg(self, cfg: OverlayConfig) -> None:
+        self._orig_row.setVisible(cfg.show_original or self.tr is None)
+        self._style(cfg)
 
 
 class OverlayWindow(QWidget):
@@ -25,7 +101,7 @@ class OverlayWindow(QWidget):
         super().__init__()
         self.cfg = cfg
         self._drag_pos: QPoint | None = None
-        self._lines: deque[tuple[QLabel, QLabel | None]] = deque()
+        self._lines: deque[_Line] = deque()
         self._interim: QLabel | None = None
 
         flags = (Qt.FramelessWindowHint | Qt.Tool
@@ -38,10 +114,10 @@ class OverlayWindow(QWidget):
         self._frame = QFrame(self)
         self._frame.setObjectName("ov")
         self._layout = QVBoxLayout(self._frame)
-        self._layout.setContentsMargins(14, 8, 14, 8)
-        self._layout.setSpacing(4)
+        self._layout.setContentsMargins(16, 10, 16, 10)
+        self._layout.setSpacing(6)
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(10, 10, 10, 10)  # room for the drop shadow
         outer.addWidget(self._frame)
         self.resize(760, 120)
         self._apply_style()
@@ -52,19 +128,16 @@ class OverlayWindow(QWidget):
     def _apply_style(self) -> None:
         a = self.cfg.bg_opacity
         self._frame.setStyleSheet(
-            f"#ov {{ background: rgba(12,12,16,{a}); border-radius: 10px; }}")
-        self._style_lines()
-
-    def _style_lines(self) -> None:
-        fs = self.cfg.font_size
-        for orig, tr in self._lines:
-            orig.setStyleSheet(
-                f"color: #b8b8c0; font-size: {max(10, fs - 8)}px; "
-                "background: transparent;")
-            if tr is not None:
-                tr.setStyleSheet(
-                    f"color: #ffffff; font-size: {fs}px; font-weight: 600;"
-                    "background: transparent;")
+            f"#ov {{ background: rgba(16,17,23,{a});"
+            " border: 1px solid rgba(255,255,255,22);"
+            " border-radius: 14px; }}")
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(28)
+        shadow.setOffset(0, 4)
+        shadow.setColor(Qt.black)
+        self._frame.setGraphicsEffect(shadow)
+        for line in self._lines:
+            line.apply_cfg(self.cfg)
 
     def _apply_click_through(self) -> None:
         hwnd = int(self.winId())
@@ -86,37 +159,16 @@ class OverlayWindow(QWidget):
         self.setAttribute(Qt.WA_TransparentForMouseEvents, cfg.click_through)
         self._apply_style()
         self._apply_click_through()
-        self._reflow()
         self.show()
 
     # ---------------- content ----------------
 
     def add_line(self, lang: str, speaker: str, original: str,
                  translation: str | None, action: str) -> None:
-        tag = f"[{lang_name(lang)}]"
-        if speaker:
-            tag += f"[{speaker}]"
-        orig = QLabel(f"{tag} {original}")
-        orig.setWordWrap(True)
-        orig.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        tr: QLabel | None = None
-        if translation:
-            tr = QLabel(translation)
-            tr.setWordWrap(True)
-            tr.setTextInteractionFlags(Qt.TextSelectableByMouse)
-            tr.setStyleSheet(
-                f"color: #ffffff; font-size: {self.cfg.font_size}px; "
-                "font-weight: 600; background: transparent;")
-        if not self.cfg.show_original and tr is not None:
-            orig.hide()
-        orig.setStyleSheet(
-            f"color: #b8b8c0; font-size: {max(10, self.cfg.font_size - 8)}px; "
-            "background: transparent;")
-
-        self._layout.addWidget(orig)
-        if tr is not None:
-            self._layout.addWidget(tr)
-        self._lines.append((orig, tr))
+        line = _Line(self.cfg, lang, speaker, original, translation)
+        self._layout.addWidget(line)
+        self._lines.append(line)
+        _fade_in(line)
         self._trim()
 
     def add_interim(self, text: str) -> None:
@@ -125,10 +177,12 @@ class OverlayWindow(QWidget):
         lab = QLabel(f"… {text}")
         lab.setWordWrap(True)
         lab.setStyleSheet(
-            f"color: #7f9fff; font-size: {max(10, self.cfg.font_size - 6)}px; "
+            f"color: {theme.ACCENT}; font-style: italic;"
+            f"font-size: {max(10, self.cfg.font_size - 6)}px;"
             "background: transparent;")
         self._layout.addWidget(lab)
         self._interim = lab
+        _fade_in(lab, 120)
 
     def clear_interim(self) -> None:
         lab = getattr(self, "_interim", None)
@@ -139,24 +193,15 @@ class OverlayWindow(QWidget):
 
     def _trim(self) -> None:
         while len(self._lines) > self.cfg.max_lines:
-            orig, tr = self._lines.popleft()
-            self._layout.removeWidget(orig)
-            orig.deleteLater()
-            if tr is not None:
-                self._layout.removeWidget(tr)
-                tr.deleteLater()
-
-    def _reflow(self) -> None:
-        self._apply_style()
+            line = self._lines.popleft()
+            self._layout.removeWidget(line)
+            line.deleteLater()
 
     def clear(self) -> None:
         while self._lines:
-            orig, tr = self._lines.popleft()
-            self._layout.removeWidget(orig)
-            orig.deleteLater()
-            if tr is not None:
-                self._layout.removeWidget(tr)
-                tr.deleteLater()
+            line = self._lines.popleft()
+            self._layout.removeWidget(line)
+            line.deleteLater()
         self.clear_interim()
 
     # ---------------- drag ----------------

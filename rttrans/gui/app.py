@@ -24,7 +24,8 @@ def run() -> int:
 
     app = QApplication(sys.argv)
     app.setApplicationName("RT Translator")
-    app.setStyle("Fusion")
+    from .theme import apply_theme
+    apply_theme(app)
 
     cfg = Config.load()
     # DB lives in app data (stable); WAV files go to the user-chosen record_dir.

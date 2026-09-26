@@ -193,7 +193,14 @@ class Pipeline:
             now = time.monotonic()
             if now - t_level > 0.1:
                 rms = float(np.sqrt(np.mean(chunk ** 2) + 1e-12))
-                self._emit("level", {"rms": min(1.0, rms * 4)})
+                # downsampled abs envelope for the GUI waveform (64 bins)
+                nb = 64
+                n = chunk.size // nb * nb
+                if n >= nb:
+                    amps = np.abs(chunk[:n].reshape(-1, nb)).max(axis=0).tolist()
+                else:
+                    amps = [float(np.abs(chunk).max()) if chunk.size else 0.0] * nb
+                self._emit("level", {"rms": min(1.0, rms * 4), "wave": amps})
                 t_level = now
 
             if vad.speaking:

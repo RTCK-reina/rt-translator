@@ -33,8 +33,10 @@ run.bat   (= .venv\Scripts\python.exe main.py)
 - ctranslate2 の推論で実際に必要なのは `cublas64_12.dll`+`cublasLt64_12.dll`
   のみ(推論時ロード確認済)。cuDNNはCT2が静的リンク同梱のため
   `nvidia-cudnn-cu12` は**インストール不要**(1.4GB削減)。
-- exe: `pyinstaller rt-translator.spec --clean --noconfirm` → onedir
-  `dist/RTTranslator/`。torch/silero_vad等は exclude 済。
+- exe: `tools/build_package.py` (pyinstaller + portable.txt + models/
+  + 3分割zip を一括実行)。COLLECTは dist/RTTranslator を毎回消すので
+  pyinstaller単体実行後は必ず `build_package.py --assemble` で再配置。
+  torch/silero_vad等は spec で exclude 済。
 - `main.py --selftest` : 非GUI診断(モデル/デバイス/DB) → selftest.txt。
 - 初回起動DL: `modeldl.missing_models/ensure_models` が不足分だけDL。
   portable時whisperは `models/whisper-<name>` へ `output_dir` 直DL。

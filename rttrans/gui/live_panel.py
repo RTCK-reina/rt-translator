@@ -5,8 +5,8 @@ from datetime import datetime
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QGroupBox, QHBoxLayout,
-                               QLabel, QPlainTextEdit, QProgressBar,
-                               QPushButton, QTableWidget, QTableWidgetItem,
+                               QLabel, QProgressBar, QPushButton,
+                               QTableWidget, QTableWidgetItem,
                                QVBoxLayout, QWidget)
 
 from .. import devices
@@ -15,6 +15,8 @@ from ..langs import (ACTION_LABELS, ACTIONS, LANGS, all_known_codes,
                      lang_name)
 from ..pipeline import Pipeline
 from .overlay import OverlayWindow
+from .transcript import TranscriptView
+from .waveform import WaveformWidget
 
 
 def fmt_time(t: float) -> str:
@@ -116,9 +118,11 @@ class LivePanel(QWidget):
         # --- control row ---
         ctrl = QHBoxLayout()
         self.btn_start = QPushButton("開始")
+        self.btn_start.setObjectName("primary")
         self.btn_start.setMinimumHeight(36)
         self.btn_start.clicked.connect(self._start)
         self.btn_stop = QPushButton("停止")
+        self.btn_stop.setObjectName("danger")
         self.btn_stop.setMinimumHeight(36)
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self._stop)
@@ -147,15 +151,17 @@ class LivePanel(QWidget):
         stat.addWidget(self.status, 2)
         root.addLayout(stat)
 
+        # --- waveform ---
+        self.waveform = WaveformWidget()
+        root.addWidget(self.waveform)
+
         self.interim = QLabel("")
         self.interim.setStyleSheet("color: #7f9fff;")
         self.interim.setWordWrap(True)
         root.addWidget(self.interim)
 
         # --- transcript ---
-        self.transcript = QPlainTextEdit()
-        self.transcript.setReadOnly(True)
-        self.transcript.setPlaceholderText("ここに文字起こしと翻訳が表示されます")
+        self.transcript = TranscriptView()
         root.addWidget(self.transcript, 1)
 
     # ---------------- device / mode ----------------
@@ -242,6 +248,7 @@ class LivePanel(QWidget):
         dev_id = self.device_combo.currentData()
         self._device_changed(self.device_combo.currentIndex())
         self.transcript.clear()
+        self.waveform.clear()
         self._session_lines = []
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
@@ -260,6 +267,7 @@ class LivePanel(QWidget):
         self.btn_start.setEnabled(True)
         self.interim.setText("")
         self.speech.setText("")
+        self.waveform.set_active(False)
 
     def _toggle_overlay(self, checked: bool) -> None:
         if checked:
@@ -293,8 +301,10 @@ class LivePanel(QWidget):
                 self.btn_stop.setEnabled(False)
         elif kind == "level":
             self.level.setValue(int(p["rms"] * 100))
+            self.waveform.push(p.get("wave") or [])
         elif kind == "speech":
             self.speech.setText("● 聞き取り中" if p["state"] == "start" else "")
+            self.waveform.set_active(p["state"] == "start")
             if p["state"] == "end":
                 self.interim.setText("")
                 if self.overlay:
@@ -314,16 +324,14 @@ class LivePanel(QWidget):
     def _add_segment(self, s: dict) -> None:
         self.ensure_lang_row(s["lang"])
         self.interim.setText("")
+        self.transcript.add_segment(s)
         ts = fmt_time(s["start"])
         sp = f"[{s['speaker']}]" if s.get("speaker") else ""
         header = f"[{ts}] [{s['lang_name']}]{sp}"
-        line = f"{header} {s['text']}"
-        self.transcript.appendPlainText(line)
-        self._session_lines.append(line)
+        self._session_lines.append(f"{header} {s['text']}")
         if s.get("translation"):
-            tline = f"{' ' * len(header)}  → {s['translation']}"
-            self.transcript.appendPlainText(tline)
-            self._session_lines.append(tline)
+            self._session_lines.append(
+                f"{' ' * len(header)}  → {s['translation']}")
         if self.overlay and self.btn_overlay.isChecked():
             self.overlay.clear_interim()
             self.overlay.add_line(s["lang"], s.get("speaker") or "",
