@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox,
                                QFileDialog, QFormLayout, QGroupBox,
                                QHBoxLayout, QLabel, QLineEdit, QMessageBox,
@@ -26,6 +27,7 @@ class SettingsPanel(QWidget):
         outer = QVBoxLayout(self)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         outer.addWidget(scroll, 1)
         body = QWidget()
         scroll.setWidget(body)
@@ -42,24 +44,28 @@ class SettingsPanel(QWidget):
         self.ed_spk = self._path_row(fm, "話者埋め込み (onnx)", self.cfg.speaker_model)
         self.ed_seg = self._path_row(fm, "セグメンテーション (onnx)", self.cfg.segmentation_model)
 
-        dl = QHBoxLayout()
         btn_all = QPushButton("不足モデルを一括DL")
+        btn_all.setObjectName("primary")
         btn_all.clicked.connect(self._dl_all)
-        dl.addWidget(btn_all)
+        fm.addRow(btn_all)
+        dl = QHBoxLayout()
         for label, fn in [
-            ("翻訳モデルDL", self._dl_nllb),
-            ("話者モデルDL", self._dl_speaker),
-            ("セグメンテーションDL", self._dl_seg),
-            ("Whisper事前DL(現在モード)", self._dl_whisper),
+            ("翻訳DL", self._dl_nllb),
+            ("話者DL", self._dl_speaker),
+            ("セグDL", self._dl_seg),
+            ("Whisper DL", self._dl_whisper),
         ]:
             b = QPushButton(label)
             b.clicked.connect(fn)
             dl.addWidget(b)
         dl.addStretch(1)
-        fm.addRow(dl)
+        fm.addRow("個別:", dl)
         self.btn_unload = QPushButton("モデル解放 (VRAM/メモリを空ける)")
         self.btn_unload.clicked.connect(self._unload_models)
-        fm.addRow(self.btn_unload)
+        unl = QHBoxLayout()
+        unl.addWidget(self.btn_unload)
+        unl.addStretch(1)
+        fm.addRow(unl)
         root.addWidget(g_model)
 
         # ---------- mode presets ----------
