@@ -80,14 +80,8 @@ QComboBox:hover, QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover {{
 QComboBox:focus, QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border-color: {ACCENT};
 }}
-QComboBox::drop-down {{ border: none; width: 24px; }}
-QComboBox::down-arrow {{
-    image: none;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 6px solid {TEXT_DIM};
-    margin-right: 8px;
-}}
+QComboBox::drop-down {{ border: none; width: 26px; }}
+QComboBox::down-arrow {{ image: url({{ARROW_IMG}}); width: 10px; height: 6px; }}
 QComboBox QAbstractItemView {{
     background: {BG_PANEL};
     border: 1px solid {BORDER};
@@ -160,7 +154,7 @@ QCheckBox::indicator {{
 QCheckBox::indicator:checked {{
     background: {ACCENT};
     border-color: {ACCENT};
-    image: none;
+    image: url({{CHECK_IMG}});
 }}
 QCheckBox::indicator:hover {{ border-color: {ACCENT}; }}
 
@@ -200,6 +194,60 @@ QLabel#dim {{ color: {TEXT_DIM}; }}
 """
 
 
+def _check_png() -> str:
+    """Generate a white check-mark PNG in the app data dir; return its
+    forward-slashed path for QSS url(). Cached after first call."""
+    from pathlib import Path
+    from ..config import app_data_dir
+    p = Path(app_data_dir()) / "assets" / "check.png"
+    if not p.exists():
+        p.parent.mkdir(parents=True, exist_ok=True)
+        from PySide6.QtCore import Qt as _Qt
+        from PySide6.QtGui import QPainter, QPainterPath, QPen, QPixmap
+        pm = QPixmap(12, 12)
+        pm.fill(_Qt.transparent)
+        pa = QPainter(pm)
+        pa.setRenderHint(QPainter.Antialiasing)
+        pen = QPen(QColor("#ffffff"), 2.2)
+        pen.setCapStyle(_Qt.RoundCap)
+        pen.setJoinStyle(_Qt.RoundJoin)
+        pa.setPen(pen)
+        path = QPainterPath()
+        path.moveTo(2.4, 6.4)
+        path.lineTo(5.0, 9.2)
+        path.lineTo(9.8, 3.0)
+        pa.drawPath(path)
+        pa.end()
+        pm.save(str(p))
+    return str(p).replace("\\", "/")
+
+
+def _arrow_png() -> str:
+    """Small down-pointing caret PNG for combo boxes; cached on disk."""
+    from pathlib import Path
+    from ..config import app_data_dir
+    p = Path(app_data_dir()) / "assets" / "arrow_down.png"
+    if not p.exists():
+        p.parent.mkdir(parents=True, exist_ok=True)
+        from PySide6.QtCore import Qt as _Qt
+        from PySide6.QtGui import QPainter, QPainterPath, QPixmap
+        pm = QPixmap(20, 12)
+        pm.fill(_Qt.transparent)
+        pa = QPainter(pm)
+        pa.setRenderHint(QPainter.Antialiasing)
+        pa.setPen(_Qt.NoPen)
+        pa.setBrush(QColor(TEXT_DIM))
+        path = QPainterPath()
+        path.moveTo(3, 3)
+        path.lineTo(17, 3)
+        path.lineTo(10, 9)
+        path.closeSubpath()
+        pa.drawPath(path)
+        pa.end()
+        pm.save(str(p))
+    return str(p).replace("\\", "/")
+
+
 def apply_theme(app: QApplication) -> None:
     app.setStyle("Fusion")
     app.setFont(QFont("Yu Gothic UI", 10))
@@ -213,4 +261,6 @@ def apply_theme(app: QApplication) -> None:
     pal.setColor(QPalette.Highlight, QColor(ACCENT))
     pal.setColor(QPalette.PlaceholderText, QColor(TEXT_DIM))
     app.setPalette(pal)
-    app.setStyleSheet(QSS)
+    qss = QSS.replace("{CHECK_IMG}", _check_png()).replace(
+        "{ARROW_IMG}", _arrow_png())
+    app.setStyleSheet(qss)

@@ -79,11 +79,37 @@ def make_zips() -> None:
     zipdir(rest, out / "RTTranslator-models-2.zip")
 
 
+def preserve_data() -> Path | None:
+    """Move dist data/ aside so COLLECT (or the build) can't delete it."""
+    data = DIST / "data"
+    if not data.exists():
+        return None
+    bak = ROOT / "dist" / "_data_backup"
+    if bak.exists():
+        shutil.rmtree(bak)
+    shutil.move(str(data), str(bak))
+    return bak
+
+
+def restore_data(bak: Path | None) -> None:
+    if bak is None or not bak.exists():
+        return
+    dst = DIST / "data"
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.move(str(bak), str(dst))
+
+
 if __name__ == "__main__":
+    bak = None
     if "--assemble" not in sys.argv:
-        subprocess.check_call(
-            [sys.executable, "-m", "PyInstaller", "rt-translator.spec",
-             "--clean", "--noconfirm"], cwd=ROOT)
+        bak = preserve_data()
+        try:
+            subprocess.check_call(
+                [sys.executable, "-m", "PyInstaller", "rt-translator.spec",
+                 "--clean", "--noconfirm"], cwd=ROOT)
+        finally:
+            restore_data(bak)
     assemble()
     make_zips()
     print("done")
