@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Build artifacts
+build/
+dist/
+*.spec.bak
+
+# Test artifacts
+tests/live_out.txt
+tests/tmp_*/
+tests/listmods.ps1
+
+# OS
+Thumbs.db
+nul

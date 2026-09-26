@@ -1,0 +1,13 @@
+PySide6>=6.7.0
+numpy>=1.26.0
+soundcard>=0.4.4
+soxr>=0.5.0
+soundfile>=0.12.1
+silero-vad>=5.1.0
+onnxruntime>=1.17.0
+faster-whisper>=1.1.0
+ctranslate2>=4.4.0
+nvidia-cublas-cu12; sys_platform == "win32"
+sentencepiece>=0.2.0
+sherpa-onnx>=1.10.0
+huggingface_hub>=0.24.0
