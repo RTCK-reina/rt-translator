@@ -61,7 +61,12 @@ def run_selftest(out_path: Path | None = None) -> int:
         devs = list_devices()
         log(f"devices: {len(devs)} ({sum(d.is_loopback for d in devs)} loopback)")
 
-        # 6) store
+        # 6) model presence
+        from . import modeldl as dm
+        miss = dm.missing_labels(cfg)
+        log(f"models: {'all present' if not miss else 'missing -> ' + ', '.join(miss)}")
+
+        # 7) store
         from .store import Store
         st = Store(str(app_data_dir() / "selftest_db"))
         rid = st.create_recording("x", "selftest", "dev", "eco")

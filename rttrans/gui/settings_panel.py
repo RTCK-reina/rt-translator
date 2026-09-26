@@ -43,6 +43,9 @@ class SettingsPanel(QWidget):
         self.ed_seg = self._path_row(fm, "セグメンテーション (onnx)", self.cfg.segmentation_model)
 
         dl = QHBoxLayout()
+        btn_all = QPushButton("不足モデルを一括DL")
+        btn_all.clicked.connect(self._dl_all)
+        dl.addWidget(btn_all)
         for label, fn in [
             ("翻訳モデルDL", self._dl_nllb),
             ("話者モデルDL", self._dl_speaker),
@@ -179,6 +182,11 @@ class SettingsPanel(QWidget):
         self._task.progress.connect(lambda m, f: self._log(m))
 
     # ---------------- actions ----------------
+
+    def _dl_all(self) -> None:
+        self._save()
+        from .model_dialog import ensure_models_gui
+        ensure_models_gui(self.cfg, self)
 
     def _dl_nllb(self) -> None:
         self._save()

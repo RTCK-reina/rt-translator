@@ -36,6 +36,9 @@ run.bat   (= .venv\Scripts\python.exe main.py)
 - exe: `pyinstaller rt-translator.spec --clean --noconfirm` → onedir
   `dist/RTTranslator/`。torch/silero_vad等は exclude 済。
 - `main.py --selftest` : 非GUI診断(モデル/デバイス/DB) → selftest.txt。
+- 初回起動DL: `modeldl.missing_models/ensure_models` が不足分だけDL。
+  portable時whisperは `models/whisper-<name>` へ `output_dir` 直DL。
+  GUIは `gui/model_dialog.py` のダイアログを app 起動時に自動表示。
 - 設定・モデル・DB は `%APPDATA%\RTTranslator\` 配下。録音WAVは設定の record_dir。
 - **ポータブルモード**: exe隣に `portable.txt` があれば config/models/data を
   exe基準に解決(`config.portable_root`)。whisperは `models/whisper-<name>`

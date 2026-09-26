@@ -11,7 +11,7 @@ import tarfile
 import urllib.request
 from pathlib import Path
 
-from .config import Config  # noqa: E402
+from .config import Config, portable_root  # noqa: E402
 
 NLLB_REPO = "mijuanlo/nllb-200-distilled-600M-ct2-int8"
 NLLB_FILES = ["model.bin", "config.json", "sentencepiece.bpe.model",
@@ -46,11 +46,19 @@ def download_nllb(dest: str, progress=_progress) -> str:
     return str(d)
 
 
+def whisper_local_dir(model: str) -> Path | None:
+    """Portable package: whisper models live in <exe>/models/whisper-<name>."""
+    pr = portable_root()
+    return (pr / "models" / f"whisper-{model}") if pr is not None else None
+
+
 def download_whisper(model: str, progress=_progress) -> str:
     """Pre-fetch a faster-whisper model (handles alias->repo mapping)."""
     from faster_whisper.utils import download_model
 
-    p = download_model(model)
+    out = whisper_local_dir(model)
+    kw = {"output_dir": str(out)} if out is not None else {}
+    p = download_model(model, **kw)
     progress(f"whisper: {model} -> {p}")
     return p
 
@@ -107,6 +115,99 @@ def download_all(cfg: Config | None = None, progress=_progress) -> None:
     download_whisper(cfg.eco.whisper_model, progress)
     download_whisper(cfg.power.whisper_model, progress)
     progress("done")
+
+
+# ---------------- presence checks / first-run download ----------------
+
+ITEM_LABELS = {
+    "nllb": "翻訳モデル (NLLB-200 int8, ~600MB)",
+    "speaker": "話者埋め込みモデル (~38MB)",
+    "segmentation": "セグメンテーション (~6MB)",
+}
+
+
+def nllb_present(cfg: Config) -> bool:
+    return (Path(cfg.nllb_dir) / "model.bin").exists()
+
+
+def speaker_present(cfg: Config) -> bool:
+    return Path(cfg.speaker_model).exists()
+
+
+def segmentation_present(cfg: Config) -> bool:
+    return Path(cfg.segmentation_model).exists()
+
+
+def whisper_present(cfg: Config, model: str) -> bool:
+    resolved = cfg.resolve_whisper(model)
+    p = Path(resolved)
+    if p.is_dir():
+        return (p / "model.bin").exists()
+    try:
+        from faster_whisper.utils import download_model
+        download_model(resolved, local_files_only=True)
+        return True
+    except Exception:
+        return False
+
+
+def missing_models(cfg: Config) -> list[str]:
+    """Component keys still needing download (whisper -> 'whisper:<name>')."""
+    miss: list[str] = []
+    if not nllb_present(cfg):
+        miss.append("nllb")
+    if not speaker_present(cfg):
+        miss.append("speaker")
+    if not segmentation_present(cfg):
+        miss.append("segmentation")
+    for m in _whisper_models(cfg):
+        if not whisper_present(cfg, m):
+            miss.append(f"whisper:{m}")
+    return miss
+
+
+def missing_labels(cfg: Config) -> list[str]:
+    out = []
+    for k in missing_models(cfg):
+        if k.startswith("whisper:"):
+            name = k.split(":", 1)[1]
+            size = {"tiny": "~75MB", "base": "~150MB", "small": "~460MB",
+                    "medium": "~1.5GB"}.get(name, "~1-2GB")
+            out.append(f"Whisper {name} ({size})")
+        else:
+            out.append(ITEM_LABELS.get(k, k))
+    return out
+
+
+def _whisper_models(cfg: Config) -> list[str]:
+    if cfg.whisper_model_path:
+        return [cfg.whisper_model_path]
+    return sorted({cfg.eco.whisper_model, cfg.power.whisper_model})
+
+
+def ensure_models(cfg: Config, progress) -> None:
+    """Download only missing components. progress(msg, frac 0..1)."""
+    steps: list[tuple[str, object]] = []
+    if not nllb_present(cfg):
+        steps.append(("翻訳モデル", lambda p: download_nllb(cfg.nllb_dir, p)))
+    if not speaker_present(cfg):
+        steps.append(("話者モデル", lambda p: download_speaker_model(cfg.speaker_model, p)))
+    if not segmentation_present(cfg):
+        steps.append(("セグメンテーション", lambda p: download_segmentation(
+            str(Path(cfg.segmentation_model).parent), p)))
+    for m in _whisper_models(cfg):
+        if not whisper_present(cfg, m):
+            steps.append((f"Whisper {m}", lambda p, m=m: download_whisper(m, p)))
+
+    n = len(steps)
+    if n == 0:
+        progress("models already present", 1.0)
+        return
+    for i, (label, fn) in enumerate(steps):
+        progress(f"[{i + 1}/{n}] {label} ...", i / n)
+        fn(lambda msg: progress(msg, i / n))
+        progress(f"{label}: done", (i + 1) / n)
+    progress("all models ready", 1.0)
 
 
 if __name__ == "__main__":

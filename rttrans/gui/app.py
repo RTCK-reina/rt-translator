@@ -34,4 +34,9 @@ def run() -> int:
 
     win = MainWindow(cfg, store, pipeline, bridge)
     win.show()
+
+    # first run: offer to download missing models
+    from .model_dialog import ensure_models_gui
+    ensure_models_gui(cfg, win)
+
     return app.exec()
