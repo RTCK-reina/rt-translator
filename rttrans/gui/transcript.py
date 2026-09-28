@@ -99,16 +99,17 @@ class TranscriptView(QScrollArea):
         self._lay.addStretch(1)
         self.setWidget(self._body)
         self._anims: list[QPropertyAnimation] = []
+        self._last_max = 0
+        # レイアウト反映は非同期（かつスクロールバー出現時の幅変更で
+        # 複数回流れてくる）ため、追加直後に maximum() を読んでも古い。
+        # 範囲が実際に更新された時点で「直前まで最下部にいたか」を見て追従する。
+        self.verticalScrollBar().rangeChanged.connect(self._on_range_changed)
 
     def add_segment(self, s: dict) -> None:
-        sb = self.verticalScrollBar()
-        at_bottom = sb.value() >= sb.maximum() - 8
         card = SegmentCard(s)
         self._lay.insertWidget(self._lay.count() - 1, card)
         self._fade_in(card)
         self._trim()
-        if at_bottom:
-            self._scroll_bottom()
 
     def clear(self) -> None:
         while self._lay.count() > 1:
@@ -136,6 +137,8 @@ class TranscriptView(QScrollArea):
             if item.widget():
                 item.widget().deleteLater()
 
-    def _scroll_bottom(self) -> None:
+    def _on_range_changed(self, _minimum: int, maximum: int) -> None:
         sb = self.verticalScrollBar()
-        sb.setValue(sb.maximum())
+        if sb.value() >= self._last_max - 8:
+            sb.setValue(maximum)
+        self._last_max = maximum
