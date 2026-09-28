@@ -32,6 +32,7 @@ class LivePanel(QWidget):
         self.pipeline = pipeline
         self.overlay: OverlayWindow | None = None
         self._session_lines: list[str] = []
+        self._hearing = False
         self._dev_list: list[devices.AudioDevice] = []
         self._build()
         self.refresh_devices()
@@ -265,6 +266,7 @@ class LivePanel(QWidget):
         self.btn_stop.setEnabled(False)
         self.pipeline.stop()
         self.btn_start.setEnabled(True)
+        self._hearing = False
         self.interim.setText("")
         self.speech.setText("")
         self.waveform.set_active(False)
@@ -308,12 +310,13 @@ class LivePanel(QWidget):
             self.level.setValue(int(p["rms"] * 100))
             self.waveform.push(p.get("wave") or [])
         elif kind == "speech":
-            self.speech.setText("● 聞き取り中" if p["state"] == "start" else "")
-            self.waveform.set_active(p["state"] == "start")
-            if p["state"] == "end":
-                self.interim.setText("")
-                if self.overlay:
-                    self.overlay.clear_interim()
+            self._hearing = p["state"] == "start"
+            self.speech.setText("● 聞き取り中" if self._hearing else "")
+            self.waveform.set_active(self._hearing)
+            # interim はここでは消さない。end 直後に消すと STT+翻訳の間
+            # テキストが空白になり、VAD の一時停止・セグメント未発行
+            # （STT 空 / 言語フィルタ）のとき文字が消えて見える。
+            # 確定カード到着時（_add_segment）か次の interim で更新される。
         elif kind == "interim":
             self.interim.setText(f"… {p['text']}")
             if self.overlay:
@@ -328,7 +331,8 @@ class LivePanel(QWidget):
 
     def _add_segment(self, s: dict) -> None:
         self.ensure_lang_row(s["lang"])
-        self.interim.setText("")
+        if not self._hearing:
+            self.interim.setText("")
         self.transcript.add_segment(s)
         ts = fmt_time(s["start"])
         sp = f"[{s['speaker']}]" if s.get("speaker") else ""
@@ -338,7 +342,8 @@ class LivePanel(QWidget):
             self._session_lines.append(
                 f"{' ' * len(header)}  → {s['translation']}")
         if self.overlay and self.btn_overlay.isChecked():
-            self.overlay.clear_interim()
+            if not self._hearing:
+                self.overlay.clear_interim()
             self.overlay.add_line(s["lang"], s.get("speaker") or "",
                                   s["text"], s.get("translation"),
                                   s.get("action") or "show")

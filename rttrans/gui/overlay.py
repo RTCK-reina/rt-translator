@@ -138,6 +138,14 @@ class OverlayWindow(QWidget):
         self._frame.setGraphicsEffect(shadow)
         for line in self._lines:
             line.apply_cfg(self.cfg)
+        if self._interim is not None:
+            self._interim.setStyleSheet(self._interim_style())
+
+    def _interim_style(self) -> str:
+        return (
+            f"color: {theme.ACCENT}; font-style: italic;"
+            f"font-size: {max(10, self.cfg.font_size - 6)}px;"
+            "background: transparent;")
 
     def _apply_click_through(self) -> None:
         hwnd = int(self.winId())
@@ -168,21 +176,24 @@ class OverlayWindow(QWidget):
         line = _Line(self.cfg, lang, speaker, original, translation)
         self._layout.addWidget(line)
         self._lines.append(line)
+        if self._interim is not None:
+            # interim 行が残っている場合は末尾へ差し戻す（確定行の下に来ないよう）
+            self._layout.removeWidget(self._interim)
+            self._layout.addWidget(self._interim)
         _fade_in(line)
         self._trim()
 
     def add_interim(self, text: str) -> None:
         """Interim text replaces the previous interim line."""
-        self.clear_interim()
-        lab = QLabel(f"… {text}")
-        lab.setWordWrap(True)
-        lab.setStyleSheet(
-            f"color: {theme.ACCENT}; font-style: italic;"
-            f"font-size: {max(10, self.cfg.font_size - 6)}px;"
-            "background: transparent;")
-        self._layout.addWidget(lab)
-        self._interim = lab
-        _fade_in(lab, 120)
+        lab = self._interim
+        if lab is None:
+            lab = QLabel()
+            lab.setWordWrap(True)
+            lab.setStyleSheet(self._interim_style())
+            self._layout.addWidget(lab)
+            self._interim = lab
+            _fade_in(lab, 120)
+        lab.setText(f"… {text}")
 
     def clear_interim(self) -> None:
         lab = getattr(self, "_interim", None)
